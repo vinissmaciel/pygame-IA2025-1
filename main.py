@@ -57,6 +57,63 @@ class DefaultPlayer(BasePlayer):
                 return best
             else:
                 return None
+            
+class OptimizedPlayer(BasePlayer):
+    """
+    Implementação otimizada do jogador.
+    Calcula a menor distância para base de carregamento, pacote e entrega.
+    Se a bateria estiver <= 30, prioriza o ponto de recarga se estiver mais próximo ou igual que o ponto (pacote/entrega) mais próximo.
+    Se a bateria estiver <= 10, vai direto para o ponto de recarga.
+    Se não estiver carregando pacote e houver pacotes disponíveis, retorna melhor pacote.
+    Se já tiver coletado 4 pacotes, vai para o melhor ponto de entrega.
+    Caso tiver carregando pelo menos 1 pacote, e ainda não tiver coletado 4 pacotes, retorna o melhor ponto geral (pacote/entrega).
+    """
+    def escolher_alvo(self, world):
+        sx, sy = self.position
+        
+        # Calcula menor distância para pacote.
+        best_pkg = None
+        best_pkg_dist = float('inf')
+        for pkg in world.packages:
+            d = abs(pkg[0] - sx) + abs(pkg[1] - sy)
+            if d < best_pkg_dist:
+                best_pkg_dist = d
+                best_pkg = pkg
+
+        # Calcula menor distância para entrega.
+        best_goal = None
+        best_goal_dist = float('inf')
+        for goal in world.goals:
+            d = abs(goal[0] - sx) + abs(goal[1] - sy)
+            if d < best_goal_dist:
+                best_goal_dist = d
+                best_goal = goal
+                
+        # Calcula menor distância entre melhor pacote e melhor entrega, se for igual prioriza pacote.
+        best_dist = best_pkg_dist
+        best = best_pkg
+        if(best_goal_dist < best_pkg_dist):
+            best = best_goal
+
+        # Calcula distância para recarga.
+        recharger = world.recharger
+        recharger_dist = abs(recharger[0] - sx) + abs(recharger[1] - sy)
+        
+        # Se a bateria estiver <= 30, prioriza o ponto de recarga se estiver mais próximo ou igual que o ponto (pacote/entrega) mais próximo.
+        # Se a bateria estiver <= 10, vai direto para o ponto de recarga.
+        if((self.battery <= 30 and recharger_dist <= best_dist) or self.battery <= 10):
+            return recharger
+        
+        # Se não estiver carregando pacote e houver pacotes disponíveis, retorna melhor pacote.
+        if(self.cargo == 0 and world.packages):
+            return best_pkg
+
+        # Se já tiver coletado 4 pacotes, vai para o melhor ponto de entrega.
+        if(len(world.packages) <= 1 and world.goals):
+            return best_goal
+        
+        # Caso tiver carregando pelo menos 1 pacote, e ainda não tiver coletado 4 pacotes, retorna o melhor ponto geral (pacote/entrega).
+        return best
 
 # ==========================
 # CLASSE WORLD (MUNDO)
@@ -171,7 +228,8 @@ class World:
             x = random.randint(0, self.maze_size - 1)
             y = random.randint(0, self.maze_size - 1)
             if self.map[y][x] == 0 and [x, y] not in self.packages and [x, y] not in self.goals:
-                return DefaultPlayer([x, y])
+                #return DefaultPlayer([x, y])
+                return OptimizedPlayer([x, y])
 
     def generate_recharger(self):
         # Coloca o recharger próximo ao centro
