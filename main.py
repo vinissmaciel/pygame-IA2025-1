@@ -129,7 +129,7 @@ class World:
         self.block_size = self.width // self.maze_size
 
         # Cria uma matriz 2D para planejamento de caminhos:
-        # 0 = livre, 1 = obstáculo
+        # 0 = livre, 1 = obstáculo, 2 = terreno elevado
         self.map = [[0 for _ in range(self.maze_size)] for _ in range(self.maze_size)]
         # Geração de obstáculos com padrão de linha (assembly line)
         self.generate_obstacles()
@@ -139,6 +139,12 @@ class World:
             for col in range(self.maze_size):
                 if self.map[row][col] == 1:
                     self.walls.append((col, row))
+        
+        self.elevation = []
+        for row in range(self.maze_size):
+            for col in range(self.maze_size):
+                if self.map[row][col] == 2:
+                    self.elevation.append((col,row))
 
         # Número total de itens (pacotes) a serem entregues
         self.total_items = 4
@@ -186,6 +192,7 @@ class World:
         self.ground_color = (255, 255, 255)
         self.player_color = (0, 255, 0)
         self.path_color = (200, 200, 0)
+        self.ele_color = (0, 200, 0)
 
     def generate_obstacles(self):
         """
@@ -222,6 +229,41 @@ class World:
             for c in range(top_col, top_col + block_size):
                 self.map[r][c] = 1
 
+        # Gera blocos de elevação em diferentes padrões
+        # Padrão 1: Blocos individuais espalhados
+        for _ in range(20):
+            x = random.randint(2, self.maze_size - 3)
+            y = random.randint(2, self.maze_size - 3)
+            if self.map[y][x] == 0:
+                self.map[y][x] = 2
+
+        # Padrão 2: Pequenos grupos de blocos (2x2 ou 3x3)
+        for _ in range(5):
+            size = random.choice([2, 3])
+            x = random.randint(2, self.maze_size - size - 2)
+            y = random.randint(2, self.maze_size - size - 2)
+            for dy in range(size):
+                for dx in range(size):
+                    if self.map[y + dy][x + dx] == 0 and random.random() < 0.8:
+                        self.map[y + dy][x + dx] = 2
+
+        # Padrão 3: Linhas de elevação
+        for _ in range(3):
+            if random.random() < 0.5:  # linha horizontal
+                y = random.randint(2, self.maze_size - 3)
+                length = random.randint(3, 6)
+                x = random.randint(2, self.maze_size - length - 2)
+                for dx in range(length):
+                    if self.map[y][x + dx] == 0:
+                        self.map[y][x + dx] = 2
+            else:  # linha vertical
+                x = random.randint(2, self.maze_size - 3)
+                length = random.randint(3, 6)
+                y = random.randint(2, self.maze_size - length - 2)
+                for dy in range(length):
+                    if self.map[y + dy][x] == 0:
+                        self.map[y + dy][x] = 2
+
     def generate_player(self):
         # Cria o jogador em uma célula livre que não seja de pacote ou meta.
         while True:
@@ -252,6 +294,10 @@ class World:
         for (x, y) in self.walls:
             rect = pygame.Rect(x * self.block_size, y * self.block_size, self.block_size, self.block_size)
             pygame.draw.rect(self.screen, self.wall_color, rect)
+
+        for (x, y) in self.elevation:
+            ele_rect = pygame.Rect(x * self.block_size, y * self.block_size, self.block_size, self.block_size)
+            pygame.draw.rect(self.screen, self.ele_color, ele_rect)
         # Desenha os locais de coleta (pacotes) utilizando a imagem
         for pkg in self.packages:
             x, y = pkg
