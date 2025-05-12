@@ -363,14 +363,23 @@ class Maze:
             close_set.add(current)
             for dx, dy in neighbors:
                 neighbor = (current[0] + dx, current[1] + dy)
-                tentative_g = gscore[current] + 1
-                if 0 <= neighbor[0] < size and 0 <= neighbor[1] < size:
-                    if maze[neighbor[1]][neighbor[0]] == 1:
-                        continue
-                else:
+                # Primeiro verifica se o vizinho está dentro dos limites do mapa
+                if not (0 <= neighbor[0] < size and 0 <= neighbor[1] < size):
                     continue
+                    
+                # Verifica se é um obstáculo
+                if maze[neighbor[1]][neighbor[0]] == 1:
+                    continue
+                    
+                # Calcula o custo do movimento
+                if maze[neighbor[1]][neighbor[0]] == 2:  # Se for bloco de elevação
+                    tentative_g = gscore[current] + 2  # Custo maior para elevação
+                else:
+                    tentative_g = gscore[current] + 1  # Custo normal
+                    
                 if neighbor in close_set and tentative_g >= gscore.get(neighbor, 0):
                     continue
+                    
                 if tentative_g < gscore.get(neighbor, float('inf')) or neighbor not in [i[1] for i in oheap]:
                     came_from[neighbor] = current
                     gscore[neighbor] = tentative_g
@@ -402,7 +411,11 @@ class Maze:
                 self.world.player.position = pos
                 self.steps += 1
                 # Consumo da bateria: -1 por movimento se bateria >= 0, caso contrário -5
-                self.world.player.battery -= 1
+                if self.world.map[pos[1]][pos[0]] == 2:
+                    self.world.player.battery -= 2
+                    print("passando por elevacao!")
+                else:
+                    self.world.player.battery -= 1
                 if self.world.player.battery >= 0:
                     self.score -= 1
                 else:
