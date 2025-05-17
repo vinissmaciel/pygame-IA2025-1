@@ -94,6 +94,15 @@ class OptimizedPlayer(BasePlayer):
         best = best_pkg
         if(best_goal_dist < best_pkg_dist):
             best = best_goal
+            
+        # Calcula menor distância para estrela.
+        best_star = None
+        best_star_dist = float('inf')
+        for star in world.stars:
+            d = abs(star[0] - sx) + abs(star[1] - sy)
+            if d < best_star_dist:
+                best_star_dist = d
+                best_star = star
 
         # Calcula distância para recarga.
         recharger = world.recharger
@@ -103,6 +112,10 @@ class OptimizedPlayer(BasePlayer):
         # Se a bateria estiver <= 10, vai direto para o ponto de recarga.
         if((self.battery <= 30 and recharger_dist <= best_dist) or self.battery <= 10):
             return recharger
+
+        # # Se houver estrelas e elas estiverem mais perto que outros objetivos, prioriza estrela
+        # if world.stars and best_star_dist < best_dist:
+        #     return best_star
         
         # Se não estiver carregando pacote e houver pacotes disponíveis, retorna melhor pacote.
         if(self.cargo == 0 and world.packages):
@@ -165,13 +178,23 @@ class World:
             y = random.randint(0, self.maze_size - 1)
             if self.map[y][x] == 0 and [x, y] not in self.goals and [x, y] not in self.packages:
                 self.goals.append([x, y])
+       
 
         # Cria o jogador usando a classe DefaultPlayer (pode ser substituído por outra implementação)
         self.player = self.generate_player()
 
         # Coloca o recharger (recarga de bateria) próximo ao centro (região 3x3)
         self.recharger = self.generate_recharger()
-
+         
+        self.stars = []
+        while len(self.stars) < 8:
+            x = random.randint(0, self.maze_size - 1)
+            y = random.randint(0, self.maze_size - 1)
+            # Verifica se a posição não está ocupada por outros elementos
+            if (self.map[y][x] == 0 and [x, y] not in self.packages 
+                and [x, y] not in self.goals and [x, y] != self.recharger
+                and [x, y] not in self.stars):
+                self.stars.append([x, y])
         # Inicializa a janela do Pygame
         pygame.init()
         self.screen = pygame.display.set_mode((self.width, self.height))
@@ -187,6 +210,11 @@ class World:
         self.recharger_image = pygame.image.load("images/charging-station.png")
         self.recharger_image = pygame.transform.scale(self.recharger_image, (self.block_size, self.block_size))
 
+
+        # Carrega imagem para a estrela
+        self.star_image = pygame.image.load("images/star.png")
+        self.star_image = pygame.transform.scale(self.star_image, (self.block_size, self.block_size))
+        
         # Cores utilizadas para desenho (caso a imagem não seja usada)
         self.wall_color = (100, 100, 100)
         self.ground_color = (255, 255, 255)
@@ -306,6 +334,10 @@ class World:
         for goal in self.goals:
             x, y = goal
             self.screen.blit(self.goal_image, (x * self.block_size, y * self.block_size))
+        # Desenha as estrelas
+        for star in self.stars:
+            x, y = star
+            self.screen.blit(self.star_image, (x * self.block_size, y * self.block_size))
         # Desenha o recharger utilizando a imagem
         if self.recharger:
             x, y = self.recharger
@@ -386,7 +418,62 @@ class Maze:
                     fscore[neighbor] = tentative_g + self.heuristic(neighbor, goal)
                     heapq.heappush(oheap, (fscore[neighbor], neighbor))
         return []
+    
+    def bellman_ford(self, start, goal):
+        size = self.world.maze_size
+        dist = {}
+        prev = {}
 
+        # Inicializa distâncias
+        for y in range(size):
+            for x in range(size):
+                dist[(x, y)] = float('inf')
+                prev[(x, y)] = None
+        dist[tuple(start)] = 0
+
+        # Direções (vizinhos)
+        directions = [(0, 1), (1, 0), (0, -1), (-1, 0)]
+
+        # Relaxa as arestas (V-1) vezes
+        for _ in range(size * size - 1):
+            for y in range(size):
+                for x in range(size):
+                    if self.world.map[y][x] == 1:  # obstáculo
+                        continue
+                    for dx, dy in directions:
+                        nx, ny = x + dx, y + dy
+                        if not (0 <= nx < size and 0 <= ny < size):
+                            continue
+                        if self.world.map[ny][nx] == 1:
+                            continue
+
+                        weight = 1
+                        if self.world.map[ny][nx] == 2:
+                            weight = 2 #terreno elevado
+
+                        if [nx, ny] in self.world.stars:
+                            weight = -0.20 # benefício da estrela
+                        
+                        if self.world.player.battery < 0:
+                            weight = 2.5 #sem bateria
+
+                        if dist[(x, y)] + weight < dist[(nx, ny)]:
+                            dist[(nx, ny)] = dist[(x, y)] + weight
+                            prev[(nx, ny)] = (x, y)
+
+        # Agora sim: reconstrói caminho FORA do loop
+        path = []
+        current = tuple(goal)
+        while current != tuple(start):
+            path.append(list(current))
+            current = prev[current]
+            if current is None:
+                return []  # sem caminho
+        path.append(list(start))
+        path.reverse()
+        return path
+
+    
     def game_loop(self):
         # O jogo termina quando o número de entregas realizadas é igual ao total de itens.
         while self.running:
@@ -400,7 +487,7 @@ class Maze:
                 self.running = False
                 break
 
-            self.path = self.astar(self.world.player.position, target)
+            self.path = self.bellman_ford(self.world.player.position, target)
             if not self.path:
                 print("Nenhum caminho encontrado para o alvo", target)
                 self.running = False
@@ -420,6 +507,12 @@ class Maze:
                     self.score -= 1
                 else:
                     self.score -= 5
+                    
+                # Verifica se coletou uma estrela
+                if pos in self.world.stars:
+                    self.world.stars.remove(pos)
+                    self.score += 25
+                    print("Estrela coletada! 25 pontos")
                 # Recarrega a bateria se estiver no recharger
                 if self.world.recharger and pos == self.world.recharger:
                     self.world.player.battery = 60
