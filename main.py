@@ -161,7 +161,7 @@ class World:
                     self.elevation.append((col,row))
 
         # Número total de itens (pacotes) a serem entregues
-        self.total_items = 5
+        self.total_items = 9
 
         # Geração dos locais de coleta (pacotes)
         self.packages = []
@@ -300,7 +300,7 @@ class World:
             y = random.randint(0, self.maze_size - 1)
             if self.map[y][x] == 0 and [x, y] not in self.packages and [x, y] not in self.goals:
                 #return DefaultPlayer([x, y])
-                return OptimizedPlayer([x, y])
+                return DefaultPlayer([x, y])
 
     def generate_recharger(self):
         # Coloca o recharger próximo ao centro
@@ -464,7 +464,7 @@ class Maze:
                             weight = 2 #terreno elevado
 
                         if [nx, ny] in self.world.stars:
-                            weight = -0.20 # benefício da estrela
+                            weight = -0.50 # benefício da estrela
                         
                         if self.world.player.battery < 0:
                             weight = 2.5 #sem bateria
@@ -535,8 +535,8 @@ class Maze:
                 # Verifica se coletou uma estrela
                 if pos in self.world.stars:
                     self.world.stars.remove(pos)
-                    self.score += 25
-                    print("Estrela coletada! 25 pontos")
+                    self.score += 35
+                    print("Estrela coletada! 35 pontos")
                 # Recarrega a bateria se estiver no recharger
                 if self.world.recharger and pos == self.world.recharger:
                     self.world.player.battery = 60
