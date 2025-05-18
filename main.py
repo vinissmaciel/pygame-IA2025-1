@@ -4,6 +4,7 @@ import heapq
 import sys
 import argparse
 from abc import ABC, abstractmethod
+from metrics import PathfindingMetrics
 
 # ==========================
 # CLASSES DE PLAYER
@@ -160,7 +161,7 @@ class World:
                     self.elevation.append((col,row))
 
         # Número total de itens (pacotes) a serem entregues
-        self.total_items = 4
+        self.total_items = 5
 
         # Geração dos locais de coleta (pacotes)
         self.packages = []
@@ -368,12 +369,18 @@ class Maze:
         self.delay = 100  # milissegundos entre movimentos
         self.path = []
         self.num_deliveries = 0  # contagem de entregas realizadas
+        self.metrics = PathfindingMetrics()  # Instância para coletar métricas
+        self.use_astar = True  # Alterna entre A* e Bellman-Ford
+        self.current_path_score = 0  # Pontuação acumulada no caminho atual
 
     def heuristic(self, a, b):
         # Distância de Manhattan
         return abs(a[0] - b[0]) + abs(a[1] - b[1])
 
     def astar(self, start, goal):
+        return self.metrics.measure_algorithm('A*', self._astar_impl, start, goal)
+
+    def _astar_impl(self, start, goal):
         maze = self.world.map
         size = self.world.maze_size
         neighbors = [(1, 0), (-1, 0), (0, 1), (0, -1)]
@@ -383,6 +390,7 @@ class Maze:
         fscore = {tuple(start): self.heuristic(start, goal)}
         oheap = []
         heapq.heappush(oheap, (fscore[tuple(start)], tuple(start)))
+        
         while oheap:
             current = heapq.heappop(oheap)[1]
             if list(current) == goal:
@@ -392,6 +400,7 @@ class Maze:
                     current = came_from[current]
                 data.reverse()
                 return data
+                
             close_set.add(current)
             for dx, dy in neighbors:
                 neighbor = (current[0] + dx, current[1] + dy)
@@ -418,8 +427,11 @@ class Maze:
                     fscore[neighbor] = tentative_g + self.heuristic(neighbor, goal)
                     heapq.heappush(oheap, (fscore[neighbor], neighbor))
         return []
-    
+
     def bellman_ford(self, start, goal):
+        return self.metrics.measure_algorithm('Bellman-Ford', self._bellman_ford_impl, start, goal)
+
+    def _bellman_ford_impl(self, start, goal):
         size = self.world.maze_size
         dist = {}
         prev = {}
@@ -487,7 +499,19 @@ class Maze:
                 self.running = False
                 break
 
-            self.path = self.bellman_ford(self.world.player.position, target)
+            # Reseta a pontuação do caminho atual
+            self.current_path_score = 0
+            initial_score = self.score
+
+            # Alterna entre A* e Bellman-Ford
+            if self.use_astar:
+                self.path = self.astar(self.world.player.position, target)
+                print("Usando A*")
+            else:
+                self.path = self.bellman_ford(self.world.player.position, target)
+                print("Usando Bellman-Ford")
+            self.use_astar = not self.use_astar  # Inverte para próxima iteração
+
             if not self.path:
                 print("Nenhum caminho encontrado para o alvo", target)
                 self.running = False
@@ -534,6 +558,12 @@ class Maze:
                     self.world.goals.remove(target)
                     self.score += 50
                     print("Pacote entregue em", target, "Cargo agora:", self.world.player.cargo)
+
+            # Registra a pontuação obtida neste caminho
+            path_score = self.score - initial_score
+            algorithm_name = "A*" if self.use_astar else "Bellman-Ford"
+            self.metrics.record_score(algorithm_name, path_score)
+                    
             print(f"Passos: {self.steps}, Pontuação: {self.score}, Cargo: {self.world.player.cargo}, Bateria: {self.world.player.battery}, Entregas: {self.num_deliveries}")
 
         print("Fim de jogo!")
@@ -558,4 +588,8 @@ if __name__ == "__main__":
     
     maze = Maze(seed=args.seed)
     maze.game_loop()
+    
+    # Ao final do jogo, mostra as métricas e salva os resultados
+    print("\n=== Resultados Finais ===")
+    maze.metrics.print_summary()
 
